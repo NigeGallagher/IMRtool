@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}IMR — Submit{% endblock %}
+{% block content %}
+<div class="masthead">
+  <div class="kicker">Irish Marxist Review</div>
+  <h1>Contributor Access</h1>
+</div>
+<form method="post">
+  <label for="password">Submission password</label>
+  <input type="password" id="password" name="password" required autofocus>
+  <button type="submit">Enter</button>
+</form>
+{% endblock %}

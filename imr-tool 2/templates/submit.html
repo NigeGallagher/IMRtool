@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}IMR — Submit Your Article{% endblock %}
+{% block content %}
+<div class="masthead">
+  <div class="kicker">Irish Marxist Review</div>
+  <h1>Submit Your Article</h1>
+</div>
+
+{% if success %}
+  <div class="success">Thank you — your submission has been received.</div>
+  <p class="meta" style="margin-top:20px;">You can close this page now. We'll be in touch about layout and editing.</p>
+{% else %}
+<form method="post" enctype="multipart/form-data">
+  <label for="title">Article title</label>
+  <input type="text" id="title" name="title" required>
+
+  <label for="author">Author name</label>
+  <input type="text" id="author" name="author" required>
+
+  <label for="email">Your email</label>
+  <input type="email" id="email" name="email">
+
+  <label for="standfirst">Standfirst (one or two sentence summary)</label>
+  <textarea id="standfirst" name="standfirst"></textarea>
+
+  <label for="article_type">Type</label>
+  <select id="article_type" name="article_type">
+    <option value="article">Article</option>
+    <option value="review">Review</option>
+    <option value="interview">Interview</option>
+    <option value="editorial">Editorial</option>
+  </select>
+
+  <label for="docx_file">Manuscript (.docx)</label>
+  <input type="file" id="docx_file" name="docx_file" accept=".docx" required>
+  <p class="meta">
+    Tip: tag special paragraphs with markers on their own line — <code>[PULLQUOTE]</code>,
+    <code>[SUBHEAD]</code>, <code>[CAPTION]</code>, <code>[ENDNOTE]</code> — and they'll come out
+    styled correctly.
+  </p>
+
+  <button type="submit">Submit Article</button>
+</form>
+{% endif %}
+{% endblock %}

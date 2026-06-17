@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}IMR — Submissions{% endblock %}
+{% block content %}
+<a class="logout" href="{{ url_for('admin_logout') }}">Log out</a>
+<div class="masthead">
+  <div class="kicker">Irish Marxist Review</div>
+  <h1>Submissions</h1>
+</div>
+
+{% if submissions %}
+<table>
+  <tr>
+    <th>Received</th>
+    <th>Title</th>
+    <th>Author</th>
+    <th>Type</th>
+    <th>Download</th>
+  </tr>
+  {% for s in submissions %}
+  <tr>
+    <td>{{ s.received_at[:16] }}</td>
+    <td>{{ s.title }}</td>
+    <td>{{ s.author }}{% if s.email %}<br><span class="meta">{{ s.email }}</span>{% endif %}</td>
+    <td>{{ s.article_type }}</td>
+    <td><a class="dl" href="{{ url_for('admin_download', filename=s.output_file) }}">.docx</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="meta">No submissions yet.</p>
+{% endif %}
+{% endblock %}
