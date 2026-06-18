@@ -52,6 +52,16 @@ python app.py
 4. In InDesign, place that `.docx` into your IMR layout — paragraph styles
    should pick up automatically if the style names match your template.
 
+## Layout
+
+Output follows the print layout of the actual journal: page 1 (title,
+byline, standfirst, and the lead paragraph) is a single column. From the
+lead paragraph onward — subheads, pull quotes, the rest of the body,
+captions, and endnotes — everything flows in two columns starting on
+page 2. The "lead paragraph" is simply the first plain (unmarked)
+paragraph in the contributor's upload; anything tagged `[PULLQUOTE]` etc.
+before that point doesn't count as the lead.
+
 ## Style markers
 
 In the contributor's uploaded manuscript, any paragraph that starts with

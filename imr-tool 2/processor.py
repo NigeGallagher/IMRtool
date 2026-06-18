@@ -19,11 +19,17 @@ InDesign.
 """
 
 import os
+import zipfile
+from lxml import etree
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_LINE_SPACING
 from docx.enum.style import WD_STYLE_TYPE
+from docx.enum.section import WD_SECTION
 from docx.oxml.ns import qn
+
+W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+NSMAP = {'w': W_NS}
 
 # ─── IMR typographic system ───
 # (font, size, leading, bold, italic, all_caps)
@@ -63,6 +69,17 @@ def _set_all_caps(style, value):
             rpr.remove(caps)
 
 
+def _set_columns(section, num, space_twips=360):
+    """Set the column count on a section. python-docx always creates a
+    default <w:cols> element in the correct schema position (after pgMar,
+    before docGrid), so we just set attributes on the existing one rather
+    than inserting a new element and risking putting it in the wrong spot."""
+    sectPr = section._sectPr
+    cols = sectPr.find(qn('w:cols'))
+    cols.set(qn('w:num'), str(num))
+    cols.set(qn('w:space'), str(space_twips))
+
+
 def _get_or_add_style(doc, name):
     """'Body Text' etc already exist as Word built-ins, so reuse them
     rather than crashing on add_style."""
@@ -91,14 +108,66 @@ def _build_styles(doc):
     return doc
 
 
+def _extract_note_texts(zf, part_name, tag):
+    """Read word/footnotes.xml or word/endnotes.xml and return {id: text},
+    skipping the separator/continuation-separator placeholder entries Word
+    always includes."""
+    if part_name not in zf.namelist():
+        return {}
+    root = etree.fromstring(zf.read(part_name))
+    notes = {}
+    for note in root.findall(f'w:{tag}', NSMAP):
+        if note.get(f'{{{W_NS}}}type') in ('separator', 'continuationSeparator'):
+            continue
+        note_id = note.get(f'{{{W_NS}}}id')
+        text = ''.join(t.text or '' for t in note.findall('.//w:t', NSMAP)).strip()
+        if text:
+            notes[note_id] = text
+    return notes
+
+
+def _paragraph_note_refs(para, tag):
+    """IDs of footnote/endnote references inside this paragraph, in order."""
+    return [ref.get(f'{{{W_NS}}}id')
+            for ref in para._p.findall(f'.//w:{tag}Reference', NSMAP)]
+
+
 def extract_body_paragraphs(filepath):
     """Read the contributor's uploaded .docx and classify each paragraph
-    into an IMR style based on [MARKER] tags or Word heading levels."""
+    into an IMR style based on [MARKER] tags or Word heading levels.
+    Also pulls real Word footnotes/endnotes out of the package directly,
+    since python-docx's normal paragraph text silently drops them.
+    Returns (paragraphs, notes) where notes is [(number, text), ...]."""
     src = Document(filepath)
-    result = []
-    first_body_seen = False
+    with zipfile.ZipFile(filepath) as zf:
+        footnotes = _extract_note_texts(zf, 'word/footnotes.xml', 'footnote')
+        endnotes = _extract_note_texts(zf, 'word/endnotes.xml', 'endnote')
 
+    result = []
+    notes = []
+    seen = set()
+
+    def register(kind, note_id, source):
+        key = (kind, note_id)
+        if key in seen or note_id not in source:
+            return None
+        seen.add(key)
+        number = len(notes) + 1
+        notes.append((number, source[note_id]))
+        return number
+
+    first_body_seen = False
     for para in src.paragraphs:
+        note_numbers = []
+        for fid in _paragraph_note_refs(para, 'footnote'):
+            n = register('footnote', fid, footnotes)
+            if n:
+                note_numbers.append(n)
+        for eid in _paragraph_note_refs(para, 'endnote'):
+            n = register('endnote', eid, endnotes)
+            if n:
+                note_numbers.append(n)
+
         text = para.text.strip()
         if not text:
             continue
@@ -110,6 +179,9 @@ def extract_body_paragraphs(filepath):
                 style_name = mapped
                 break
 
+        if note_numbers:
+            text = text + ''.join(f'[{n}]' for n in note_numbers)
+
         if style_name is None:
             word_style = (para.style.name or '').lower()
             if 'heading' in word_style:
@@ -120,12 +192,19 @@ def extract_body_paragraphs(filepath):
 
         result.append((style_name, text))
 
-    return result
+    return result, notes
 
 
 def process_docx(filepath, title, author, standfirst, article_type,
                   output_folder, timestamp):
-    """Build the IMR-styled output .docx and return its path."""
+    """Build the IMR-styled output .docx and return its path.
+
+    Layout: page 1 (title, byline, standfirst, and the lead paragraph) is a
+    single column. From the lead paragraph onward, everything else —
+    subheads, pull quotes, the rest of the body, captions, endnotes —
+    flows in two columns starting on page 2, matching the print layout of
+    the actual journal.
+    """
     out = Document()
 
     # Strip the default boilerplate styles isn't necessary - we just add ours
@@ -136,8 +215,37 @@ def process_docx(filepath, title, author, standfirst, article_type,
     if standfirst:
         out.add_paragraph(standfirst, style='Standfirst')
 
-    for style_name, text in extract_body_paragraphs(filepath):
+    body_paragraphs, notes = extract_body_paragraphs(filepath)
+
+    # Find the lead paragraph (the first plain, unmarked body paragraph) -
+    # everything up to and including it stays on the single-column intro
+    # page; everything after it moves into the two-column section.
+    lead_index = next(
+        (i for i, (style_name, _) in enumerate(body_paragraphs)
+         if style_name == 'Body Text First'),
+        None
+    )
+
+    if lead_index is None:
+        intro_paragraphs, remaining_paragraphs = body_paragraphs, []
+    else:
+        intro_paragraphs = body_paragraphs[:lead_index + 1]
+        remaining_paragraphs = body_paragraphs[lead_index + 1:]
+
+    for style_name, text in intro_paragraphs:
         out.add_paragraph(text, style=style_name)
+
+    if remaining_paragraphs or notes:
+        two_col_section = out.add_section(WD_SECTION.NEW_PAGE)
+        _set_columns(two_col_section, 2)
+
+        for style_name, text in remaining_paragraphs:
+            out.add_paragraph(text, style=style_name)
+
+        if notes:
+            out.add_paragraph('Endnotes', style='Subhead')
+            for number, note_text in notes:
+                out.add_paragraph(f'{number}. {note_text}', style='Endnote Text')
 
     safe_title = ''.join(c if c.isalnum() or c in ' -_' else '' for c in title)[:50].strip() or 'untitled'
     filename = f"{timestamp}_{safe_title.replace(' ', '_')}_IMR.docx"
