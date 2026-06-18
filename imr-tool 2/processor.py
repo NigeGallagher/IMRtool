@@ -88,6 +88,13 @@ SUBHEAD_STOPWORDS = {
     'with', 'is', 'are', 'as', 'at', 'by', 'vs', 'versus', 'from', '&',
 }
 
+# Fixed blank space left on page 1, between the standfirst and the start
+# of the body text - reserved for a photo or illustration to be dropped
+# in later in InDesign. This is a flat point value rather than anything
+# based on content length, so every article gets the same gap regardless
+# of how long the standfirst or lead paragraph is.
+IMAGE_GAP_PT = 180  # roughly 2.5 inches
+
 
 def _set_all_caps(style, value):
     """python-docx doesn't expose all_caps on every version cleanly via the
@@ -120,6 +127,19 @@ def _set_margins(section):
     section.bottom_margin = Inches(MARGIN_BOTTOM_IN)
     section.left_margin = Inches(MARGIN_LEFT_IN)
     section.right_margin = Inches(MARGIN_RIGHT_IN)
+
+
+def _add_fixed_gap(doc, points):
+    """Insert an empty paragraph with an exact, fixed line height - a
+    deterministic blank space that's the same regardless of font,
+    content, or anything else, used to reserve room for an image."""
+    gap = doc.add_paragraph()
+    pf = gap.paragraph_format
+    pf.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+    pf.line_spacing = Pt(points)
+    pf.space_before = Pt(0)
+    pf.space_after = Pt(0)
+    return gap
 
 
 def _get_or_add_style(doc, name):
@@ -264,11 +284,12 @@ def process_docx(filepath, title, author, standfirst, article_type,
                   output_folder, timestamp):
     """Build the IMR-styled output .docx and return its path.
 
-    Layout: page 1 (title, byline, standfirst, and a lead chunk of body
-    text up to roughly INTRO_WORD_TARGET words) is a single column. From
-    there, everything else - subheads, pull quotes, the rest of the body,
-    captions, endnotes - flows in two columns starting on page 2, matching
-    the print layout of the actual journal.
+    Layout: page 1 (title, byline, standfirst, a fixed-height blank gap
+    reserved for a photo, and a lead chunk of body text up to roughly
+    INTRO_WORD_TARGET words) is a single column. From there, everything
+    else - subheads, pull quotes, the rest of the body, captions,
+    endnotes - flows in two columns starting on page 2, matching the
+    print layout of the actual journal.
     """
     out = Document()
 
@@ -280,6 +301,8 @@ def process_docx(filepath, title, author, standfirst, article_type,
     out.add_paragraph(f'By {author}' if author else '', style='Byline')
     if standfirst:
         out.add_paragraph(standfirst, style='Standfirst')
+
+    _add_fixed_gap(out, IMAGE_GAP_PT)
 
     body_paragraphs, notes = extract_body_paragraphs(filepath)
 

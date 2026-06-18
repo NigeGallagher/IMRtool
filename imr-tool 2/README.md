@@ -55,13 +55,20 @@ python app.py
 ## Layout
 
 Output follows the print layout of the actual journal: page 1 (title,
-byline, standfirst, and a lead chunk of running body text, roughly
-350 words by default) is a single column, fully justified, with a bit of
-space after each paragraph. From there, subheads, pull quotes, the rest
-of the body, captions, and endnotes all flow in two columns starting on
-page 2, also justified. A subhead or pull quote always starts the
-two-column section immediately, even if the word target hasn't been
-reached yet, since that's the natural break point in print layout.
+byline, standfirst, a fixed blank gap reserved for a photo, and a lead
+chunk of running body text, roughly 350 words by default) is a single
+column, fully justified, with a bit of space after each paragraph. From
+there, subheads, pull quotes, the rest of the body, captions, and
+endnotes all flow in two columns starting on page 2, also justified. A
+subhead or pull quote always starts the two-column section immediately,
+even if the word target hasn't been reached yet, since that's the
+natural break point in print layout.
+
+The blank gap after the standfirst is a fixed height (180pt, roughly
+2.5") regardless of how long the standfirst or article is - every
+submission gets exactly the same gap, since it's meant to reserve a
+consistent space for artwork to be dropped in later, not to scale with
+content. It's set as `IMAGE_GAP_PT` near the top of `processor.py`.
 
 Margins sit at 0.7" top/bottom and 0.85" left/right - slimmer than
 Word's US default (1"/1.25") so more text fits across the page, but not
