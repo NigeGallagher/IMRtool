@@ -146,6 +146,29 @@ def _add_fixed_gap(doc, points):
     return gap
 
 
+# Note markers are sized relative to the body text they sit in, scaled
+# down to roughly footnote-reference size - standard practice is to make
+# the superscript number noticeably smaller than the running text rather
+# than just raising it at full size.
+NOTE_MARKER_SCALE = 0.7
+
+
+def _add_paragraph_with_notes(doc, text, style_name, note_numbers):
+    """Add a paragraph with its main text as one run, followed by any
+    note numbers as a separate small, raised (superscript) run with no
+    brackets - standard endnote-reference styling, e.g. "...grew.9"
+    rather than "...grew.[9]"."""
+    p = doc.add_paragraph(style=style_name)
+    p.add_run(text)
+    if note_numbers:
+        marker_run = p.add_run(','.join(str(n) for n in note_numbers))
+        marker_run.font.superscript = True
+        base_size = doc.styles[style_name].font.size
+        if base_size:
+            marker_run.font.size = Pt(round(base_size.pt * NOTE_MARKER_SCALE, 1))
+    return p
+
+
 def _get_or_add_style(doc, name):
     """'Body Text' etc already exist as Word built-ins, so reuse them
     rather than crashing on add_style."""
@@ -224,7 +247,11 @@ def extract_body_paragraphs(filepath):
     into an IMR style based on [MARKER] tags or Word heading levels.
     Also pulls real Word footnotes/endnotes out of the package directly,
     since python-docx's normal paragraph text silently drops them.
-    Returns (paragraphs, notes) where notes is [(number, text), ...]."""
+    Returns (paragraphs, notes) where paragraphs is
+    [(style_name, text, note_numbers), ...] and notes is
+    [(number, text), ...]. note_numbers are kept separate from text
+    rather than baked in as "[1]" so the caller can render them as
+    proper superscript instead of bracketed inline text."""
     src = Document(filepath)
     with zipfile.ZipFile(filepath) as zf:
         footnotes = _extract_note_texts(zf, 'word/footnotes.xml', 'footnote')
@@ -266,9 +293,6 @@ def extract_body_paragraphs(filepath):
                 style_name = mapped
                 break
 
-        if note_numbers:
-            text = text + ''.join(f'[{n}]' for n in note_numbers)
-
         if style_name is None:
             word_style = (para.style.name or '').lower()
             if 'heading' in word_style:
@@ -279,7 +303,7 @@ def extract_body_paragraphs(filepath):
                 style_name = 'Body Text First' if not first_body_seen else 'Body Text'
                 first_body_seen = True
 
-        result.append((style_name, text))
+        result.append((style_name, text, note_numbers))
 
     return result, notes
 
@@ -318,26 +342,26 @@ def process_docx(filepath, title, author, standfirst, article_type,
     remaining_paragraphs = []
     word_count = 0
     in_intro = True
-    for style_name, text in body_paragraphs:
+    for style_name, text, note_numbers in body_paragraphs:
         if in_intro and style_name in INTRO_ELIGIBLE_STYLES:
-            intro_paragraphs.append((style_name, text))
+            intro_paragraphs.append((style_name, text, note_numbers))
             word_count += len(text.split())
             if word_count >= INTRO_WORD_TARGET:
                 in_intro = False
         else:
             in_intro = False
-            remaining_paragraphs.append((style_name, text))
+            remaining_paragraphs.append((style_name, text, note_numbers))
 
-    for style_name, text in intro_paragraphs:
-        out.add_paragraph(text, style=style_name)
+    for style_name, text, note_numbers in intro_paragraphs:
+        _add_paragraph_with_notes(out, text, style_name, note_numbers)
 
     if remaining_paragraphs or notes:
         two_col_section = out.add_section(WD_SECTION.NEW_PAGE)
         _set_columns(two_col_section, 2)
         _set_margins(two_col_section)
 
-        for style_name, text in remaining_paragraphs:
-            out.add_paragraph(text, style=style_name)
+        for style_name, text, note_numbers in remaining_paragraphs:
+            _add_paragraph_with_notes(out, text, style_name, note_numbers)
 
         if notes:
             out.add_paragraph('Endnotes', style='Subhead')
