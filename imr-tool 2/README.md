@@ -74,12 +74,16 @@ Margins sit at 0.7" top/bottom and 0.85" left/right - slimmer than
 Word's US default (1"/1.25") so more text fits across the page, but not
 razor-thin.
 
-The 350-word intro target is a heuristic, not a guarantee of exactly
-filling page 1 - actual fit depends on how Word/InDesign renders the
-fonts. It's set near the top of `processor.py` as `INTRO_WORD_TARGET` if
-you want to tune it; the margin values are right below it as
-`MARGIN_TOP_IN` / `MARGIN_BOTTOM_IN` / `MARGIN_LEFT_IN` /
-`MARGIN_RIGHT_IN`.
+The intro word target (180 words by default) is a heuristic, not a
+guarantee of exactly filling page 1 - actual fit depends on how
+Word/InDesign renders the fonts, and on how long the title and
+standfirst happen to be. It's deliberately set low to leave room for
+the 180pt image gap above it; if you change `IMAGE_GAP_PT`, adjust
+`INTRO_WORD_TARGET` to match, or the two-column section will get pushed
+to page 3 instead of page 2. Both constants are near the top of
+`processor.py`, alongside the margin values
+(`MARGIN_TOP_IN` / `MARGIN_BOTTOM_IN` / `MARGIN_LEFT_IN` /
+`MARGIN_RIGHT_IN`).
 
 ## Subhead auto-detection
 
