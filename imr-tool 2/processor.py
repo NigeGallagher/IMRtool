@@ -64,11 +64,15 @@ MARGIN_LEFT_IN = 0.85
 MARGIN_RIGHT_IN = 0.85
 
 # Rough word budget for the single-column intro page before switching to
-# the two-column section. This is a heuristic, not a guarantee of exactly
+# the two-column section. This needs to leave room for IMAGE_GAP_PT below
+# - that fixed-height gap eats roughly 12 lines (180pt / 15pt leading) at
+# around 14 words a line, so the word target is set well under what would
+# fit without the gap. This is a heuristic, not a guarantee of exactly
 # filling page 1 - actual fit depends on how Word/InDesign renders the
-# fonts. Tune this number up or down if the intro page is running short
-# or long in practice.
-INTRO_WORD_TARGET = 350
+# fonts, and on how long the title and standfirst happen to be. Tune this
+# number (and IMAGE_GAP_PT below) together if the intro page is running
+# short or long in practice.
+INTRO_WORD_TARGET = 180
 
 # Styles that flow as ordinary running body copy and should stop the
 # single-column intro section once the word target is hit. Subheads,
