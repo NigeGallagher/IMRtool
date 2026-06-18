@@ -22,8 +22,8 @@ import os
 import zipfile
 from lxml import etree
 from docx import Document
-from docx.shared import Pt
-from docx.enum.text import WD_LINE_SPACING
+from docx.shared import Pt, Inches
+from docx.enum.text import WD_LINE_SPACING, WD_ALIGN_PARAGRAPH
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.section import WD_SECTION
 from docx.oxml.ns import qn
@@ -32,18 +32,18 @@ W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 NSMAP = {'w': W_NS}
 
 # ─── IMR typographic system ───
-# (font, size, leading, bold, italic, all_caps)
+# (font, size, leading, bold, italic, all_caps, justify)
 STYLES = {
-    'Article Title':   ('Barlow Condensed', 36, 34, True,  False, True),
-    'Byline':          ('Barlow Condensed', 12, 14, True,  False, True),
-    'Standfirst':      ('Source Serif 4',   13, 18, True,  False, False),
-    'Body Text First': ('Source Serif 4',   10, 15, False, False, False),
-    'Body Text':       ('Source Serif 4',   10, 15, False, False, False),
-    'Subhead':         ('Barlow Condensed', 13, 16, True,  False, True),
-    'Pull Quote':      ('Barlow Condensed', 18, 20, True,  False, True),
-    'Caption':         ('Source Serif 4',    9, 12, False, True,  False),
-    'Endnote Text':    ('Source Serif 4',    9, 12, False, False, False),
-    'Footer':          ('Barlow Condensed',  9, 11, True,  False, True),
+    'Article Title':   ('Barlow Condensed', 36, 34, True,  False, True,  False),
+    'Byline':          ('Barlow Condensed', 12, 14, True,  False, True,  False),
+    'Standfirst':      ('Source Serif 4',   13, 18, True,  False, False, False),
+    'Body Text First': ('Source Serif 4',   10, 15, False, False, False, True),
+    'Body Text':       ('Source Serif 4',   10, 15, False, False, False, True),
+    'Subhead':         ('Barlow Condensed', 13, 16, True,  False, True,  False),
+    'Pull Quote':      ('Barlow Condensed', 18, 20, True,  False, True,  False),
+    'Caption':         ('Source Serif 4',    9, 12, False, True,  False, False),
+    'Endnote Text':    ('Source Serif 4',    9, 12, False, False, False, False),
+    'Footer':          ('Barlow Condensed',  9, 11, True,  False, True,  False),
 }
 
 MARKER_STYLE = {
@@ -52,6 +52,28 @@ MARKER_STYLE = {
     '[CAPTION]':   'Caption',
     '[ENDNOTE]':   'Endnote Text',
 }
+
+# Page margins, applied to both the single-column intro section and the
+# two-column body section. Roughly half of Word's US default (1"/1.25")
+# so more text fits across the page.
+MARGIN_TOP_IN = 0.5
+MARGIN_BOTTOM_IN = 0.5
+MARGIN_LEFT_IN = 0.625
+MARGIN_RIGHT_IN = 0.625
+
+# Rough word budget for the single-column intro page before switching to
+# the two-column section. This is a heuristic, not a guarantee of exactly
+# filling page 1 - actual fit depends on how Word/InDesign renders the
+# fonts. Tune this number up or down if the intro page is running short
+# or long in practice.
+INTRO_WORD_TARGET = 350
+
+# Styles that flow as ordinary running body copy and should stop the
+# single-column intro section once the word target is hit. Subheads,
+# pull quotes, captions etc. always start the two-column section even if
+# the word target hasn't been reached yet, since that's the natural
+# break point in print layout.
+INTRO_ELIGIBLE_STYLES = {'Body Text First', 'Body Text'}
 
 
 def _set_all_caps(style, value):
@@ -80,6 +102,13 @@ def _set_columns(section, num, space_twips=360):
     cols.set(qn('w:space'), str(space_twips))
 
 
+def _set_margins(section):
+    section.top_margin = Inches(MARGIN_TOP_IN)
+    section.bottom_margin = Inches(MARGIN_BOTTOM_IN)
+    section.left_margin = Inches(MARGIN_LEFT_IN)
+    section.right_margin = Inches(MARGIN_RIGHT_IN)
+
+
 def _get_or_add_style(doc, name):
     """'Body Text' etc already exist as Word built-ins, so reuse them
     rather than crashing on add_style."""
@@ -90,7 +119,7 @@ def _get_or_add_style(doc, name):
 
 
 def _build_styles(doc):
-    for name, (font, size, leading, bold, italic, caps) in STYLES.items():
+    for name, (font, size, leading, bold, italic, caps, justify) in STYLES.items():
         style = _get_or_add_style(doc, name)
         style.font.name = font
         # Force the eastasian font tag too, otherwise Word/InDesign can
@@ -105,6 +134,8 @@ def _build_styles(doc):
         pf.line_spacing = Pt(leading)
         pf.space_after = Pt(0)
         pf.space_before = Pt(0)
+        if justify:
+            pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     return doc
 
 
@@ -199,16 +230,17 @@ def process_docx(filepath, title, author, standfirst, article_type,
                   output_folder, timestamp):
     """Build the IMR-styled output .docx and return its path.
 
-    Layout: page 1 (title, byline, standfirst, and the lead paragraph) is a
-    single column. From the lead paragraph onward, everything else —
-    subheads, pull quotes, the rest of the body, captions, endnotes —
-    flows in two columns starting on page 2, matching the print layout of
-    the actual journal.
+    Layout: page 1 (title, byline, standfirst, and a lead chunk of body
+    text up to roughly INTRO_WORD_TARGET words) is a single column. From
+    there, everything else - subheads, pull quotes, the rest of the body,
+    captions, endnotes - flows in two columns starting on page 2, matching
+    the print layout of the actual journal.
     """
     out = Document()
 
     # Strip the default boilerplate styles isn't necessary - we just add ours
     _build_styles(out)
+    _set_margins(out.sections[0])
 
     out.add_paragraph(title, style='Article Title')
     out.add_paragraph(f'By {author}' if author else '', style='Byline')
@@ -217,20 +249,23 @@ def process_docx(filepath, title, author, standfirst, article_type,
 
     body_paragraphs, notes = extract_body_paragraphs(filepath)
 
-    # Find the lead paragraph (the first plain, unmarked body paragraph) -
-    # everything up to and including it stays on the single-column intro
-    # page; everything after it moves into the two-column section.
-    lead_index = next(
-        (i for i, (style_name, _) in enumerate(body_paragraphs)
-         if style_name == 'Body Text First'),
-        None
-    )
-
-    if lead_index is None:
-        intro_paragraphs, remaining_paragraphs = body_paragraphs, []
-    else:
-        intro_paragraphs = body_paragraphs[:lead_index + 1]
-        remaining_paragraphs = body_paragraphs[lead_index + 1:]
+    # Build the single-column intro out of plain running body paragraphs
+    # until the word budget is hit. A subhead/pull quote/caption always
+    # ends the intro immediately, even under budget, since that's the
+    # natural break point in print layout.
+    intro_paragraphs = []
+    remaining_paragraphs = []
+    word_count = 0
+    in_intro = True
+    for style_name, text in body_paragraphs:
+        if in_intro and style_name in INTRO_ELIGIBLE_STYLES:
+            intro_paragraphs.append((style_name, text))
+            word_count += len(text.split())
+            if word_count >= INTRO_WORD_TARGET:
+                in_intro = False
+        else:
+            in_intro = False
+            remaining_paragraphs.append((style_name, text))
 
     for style_name, text in intro_paragraphs:
         out.add_paragraph(text, style=style_name)
@@ -238,6 +273,7 @@ def process_docx(filepath, title, author, standfirst, article_type,
     if remaining_paragraphs or notes:
         two_col_section = out.add_section(WD_SECTION.NEW_PAGE)
         _set_columns(two_col_section, 2)
+        _set_margins(two_col_section)
 
         for style_name, text in remaining_paragraphs:
             out.add_paragraph(text, style=style_name)

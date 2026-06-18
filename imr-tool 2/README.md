@@ -55,12 +55,24 @@ python app.py
 ## Layout
 
 Output follows the print layout of the actual journal: page 1 (title,
-byline, standfirst, and the lead paragraph) is a single column. From the
-lead paragraph onward — subheads, pull quotes, the rest of the body,
-captions, and endnotes — everything flows in two columns starting on
-page 2. The "lead paragraph" is simply the first plain (unmarked)
-paragraph in the contributor's upload; anything tagged `[PULLQUOTE]` etc.
-before that point doesn't count as the lead.
+byline, standfirst, and a lead chunk of running body text, roughly
+350 words by default) is a single column, fully justified. From there,
+subheads, pull quotes, the rest of the body, captions, and endnotes all
+flow in two columns starting on page 2, also justified. A subhead or pull
+quote always starts the two-column section immediately, even if the word
+target hasn't been reached yet, since that's the natural break point in
+print layout.
+
+Margins are roughly half of Word's US default (0.5" top/bottom, 0.625"
+left/right) so more text fits across the page, matching the dense
+look of the print journal.
+
+The 350-word intro target is a heuristic, not a guarantee of exactly
+filling page 1 - actual fit depends on how Word/InDesign renders the
+fonts, your printer's margins, etc. It's set near the top of
+`processor.py` as `INTRO_WORD_TARGET` if you want to tune it; the margin
+values are right below it as `MARGIN_TOP_IN` / `MARGIN_BOTTOM_IN` /
+`MARGIN_LEFT_IN` / `MARGIN_RIGHT_IN`.
 
 ## Style markers
 
