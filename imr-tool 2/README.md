@@ -56,23 +56,43 @@ python app.py
 
 Output follows the print layout of the actual journal: page 1 (title,
 byline, standfirst, and a lead chunk of running body text, roughly
-350 words by default) is a single column, fully justified. From there,
-subheads, pull quotes, the rest of the body, captions, and endnotes all
-flow in two columns starting on page 2, also justified. A subhead or pull
-quote always starts the two-column section immediately, even if the word
-target hasn't been reached yet, since that's the natural break point in
-print layout.
+350 words by default) is a single column, fully justified, with a bit of
+space after each paragraph. From there, subheads, pull quotes, the rest
+of the body, captions, and endnotes all flow in two columns starting on
+page 2, also justified. A subhead or pull quote always starts the
+two-column section immediately, even if the word target hasn't been
+reached yet, since that's the natural break point in print layout.
 
-Margins are roughly half of Word's US default (0.5" top/bottom, 0.625"
-left/right) so more text fits across the page, matching the dense
-look of the print journal.
+Margins sit at 0.7" top/bottom and 0.85" left/right - slimmer than
+Word's US default (1"/1.25") so more text fits across the page, but not
+razor-thin.
 
 The 350-word intro target is a heuristic, not a guarantee of exactly
 filling page 1 - actual fit depends on how Word/InDesign renders the
-fonts, your printer's margins, etc. It's set near the top of
-`processor.py` as `INTRO_WORD_TARGET` if you want to tune it; the margin
-values are right below it as `MARGIN_TOP_IN` / `MARGIN_BOTTOM_IN` /
-`MARGIN_LEFT_IN` / `MARGIN_RIGHT_IN`.
+fonts. It's set near the top of `processor.py` as `INTRO_WORD_TARGET` if
+you want to tune it; the margin values are right below it as
+`MARGIN_TOP_IN` / `MARGIN_BOTTOM_IN` / `MARGIN_LEFT_IN` /
+`MARGIN_RIGHT_IN`.
+
+## Subhead auto-detection
+
+If a contributor doesn't tag a section heading with `[SUBHEAD]`, the tool
+tries to catch it anyway. Any plain paragraph that's short (8 words or
+fewer), has no terminal punctuation, and has every meaningful word
+capitalised (small connector words like "the", "of", "in" are allowed to
+stay lowercase) gets treated as a subhead automatically - bolded and
+styled the same as an explicitly tagged one. This catches things like
+"Silicon Economy" or "The MAGA Turn" sitting on their own line without
+needing the contributor to remember the marker syntax.
+
+It's a heuristic, so it can occasionally misfire both ways: a genuine
+short declarative sentence without a full stop could get mistaken for a
+heading, or an unusual heading style might slip through as plain body
+text. The `[SUBHEAD]` tag always works as an explicit override regardless
+of what the heuristic decides. The detection rules live in
+`_looks_like_subhead()` in `processor.py` if you want to tune the word
+limit (`MAX_SUBHEAD_WORDS`) or the list of lowercase-allowed connector
+words (`SUBHEAD_STOPWORDS`).
 
 ## Style markers
 

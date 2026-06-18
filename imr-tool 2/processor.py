@@ -19,6 +19,7 @@ InDesign.
 """
 
 import os
+import string
 import zipfile
 from lxml import etree
 from docx import Document
@@ -32,18 +33,18 @@ W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 NSMAP = {'w': W_NS}
 
 # ─── IMR typographic system ───
-# (font, size, leading, bold, italic, all_caps, justify)
+# (font, size, leading, bold, italic, all_caps, justify, space_after_pt)
 STYLES = {
-    'Article Title':   ('Barlow Condensed', 36, 34, True,  False, True,  False),
-    'Byline':          ('Barlow Condensed', 12, 14, True,  False, True,  False),
-    'Standfirst':      ('Source Serif 4',   13, 18, True,  False, False, False),
-    'Body Text First': ('Source Serif 4',   10, 15, False, False, False, True),
-    'Body Text':       ('Source Serif 4',   10, 15, False, False, False, True),
-    'Subhead':         ('Barlow Condensed', 13, 16, True,  False, True,  False),
-    'Pull Quote':      ('Barlow Condensed', 18, 20, True,  False, True,  False),
-    'Caption':         ('Source Serif 4',    9, 12, False, True,  False, False),
-    'Endnote Text':    ('Source Serif 4',    9, 12, False, False, False, False),
-    'Footer':          ('Barlow Condensed',  9, 11, True,  False, True,  False),
+    'Article Title':   ('Barlow Condensed', 36, 34, True,  False, True,  False, 0),
+    'Byline':          ('Barlow Condensed', 12, 14, True,  False, True,  False, 6),
+    'Standfirst':      ('Source Serif 4',   13, 18, True,  False, False, False, 8),
+    'Body Text First': ('Source Serif 4',   10, 15, False, False, False, True,  8),
+    'Body Text':       ('Source Serif 4',   10, 15, False, False, False, True,  8),
+    'Subhead':         ('Barlow Condensed', 13, 16, True,  False, True,  False, 6),
+    'Pull Quote':      ('Barlow Condensed', 18, 20, True,  False, True,  False, 8),
+    'Caption':         ('Source Serif 4',    9, 12, False, True,  False, False, 6),
+    'Endnote Text':    ('Source Serif 4',    9, 12, False, False, False, False, 4),
+    'Footer':          ('Barlow Condensed',  9, 11, True,  False, True,  False, 0),
 }
 
 MARKER_STYLE = {
@@ -54,12 +55,13 @@ MARKER_STYLE = {
 }
 
 # Page margins, applied to both the single-column intro section and the
-# two-column body section. Roughly half of Word's US default (1"/1.25")
-# so more text fits across the page.
-MARGIN_TOP_IN = 0.5
-MARGIN_BOTTOM_IN = 0.5
-MARGIN_LEFT_IN = 0.625
-MARGIN_RIGHT_IN = 0.625
+# two-column body section. Eased back partway from a first pass that ran
+# too tight - still noticeably slimmer than Word's US default (1"/1.25")
+# but with a bit more breathing room than the initial half-default cut.
+MARGIN_TOP_IN = 0.7
+MARGIN_BOTTOM_IN = 0.7
+MARGIN_LEFT_IN = 0.85
+MARGIN_RIGHT_IN = 0.85
 
 # Rough word budget for the single-column intro page before switching to
 # the two-column section. This is a heuristic, not a guarantee of exactly
@@ -74,6 +76,17 @@ INTRO_WORD_TARGET = 350
 # the word target hasn't been reached yet, since that's the natural
 # break point in print layout.
 INTRO_ELIGIBLE_STYLES = {'Body Text First', 'Body Text'}
+
+# Heuristic for catching section headings that the contributor didn't
+# explicitly tag with [SUBHEAD] or a Word Heading style - short,
+# punctuation-free, title-case lines like 'Artificial Valuations' or
+# 'The MAGA Turn'. Small connector words (the, of, in, ...) are allowed
+# to stay lowercase, matching normal title-case convention.
+MAX_SUBHEAD_WORDS = 8
+SUBHEAD_STOPWORDS = {
+    'a', 'an', 'the', 'and', 'or', 'but', 'of', 'in', 'on', 'to', 'for',
+    'with', 'is', 'are', 'as', 'at', 'by', 'vs', 'versus', 'from', '&',
+}
 
 
 def _set_all_caps(style, value):
@@ -119,7 +132,7 @@ def _get_or_add_style(doc, name):
 
 
 def _build_styles(doc):
-    for name, (font, size, leading, bold, italic, caps, justify) in STYLES.items():
+    for name, (font, size, leading, bold, italic, caps, justify, space_after_pt) in STYLES.items():
         style = _get_or_add_style(doc, name)
         style.font.name = font
         # Force the eastasian font tag too, otherwise Word/InDesign can
@@ -132,7 +145,7 @@ def _build_styles(doc):
         pf = style.paragraph_format
         pf.line_spacing_rule = WD_LINE_SPACING.EXACTLY
         pf.line_spacing = Pt(leading)
-        pf.space_after = Pt(0)
+        pf.space_after = Pt(space_after_pt)
         pf.space_before = Pt(0)
         if justify:
             pf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
@@ -161,6 +174,25 @@ def _paragraph_note_refs(para, tag):
     """IDs of footnote/endnote references inside this paragraph, in order."""
     return [ref.get(f'{{{W_NS}}}id')
             for ref in para._p.findall(f'.//w:{tag}Reference', NSMAP)]
+
+
+def _looks_like_subhead(text):
+    """True if a plain, untagged paragraph looks like a section heading
+    rather than a sentence of running prose: short, no terminal
+    punctuation, and every meaningful word capitalised."""
+    words = text.split()
+    if not words or len(words) > MAX_SUBHEAD_WORDS:
+        return False
+    if text[-1] in '.,;:!?':
+        return False
+    content_words = [
+        w for w in words
+        if w.strip(string.punctuation).lower() not in SUBHEAD_STOPWORDS
+    ]
+    alpha_words = [w for w in content_words if w[0].isalpha()]
+    if not alpha_words:
+        return False
+    return all(w[0].isupper() for w in alpha_words)
 
 
 def extract_body_paragraphs(filepath):
@@ -216,6 +248,8 @@ def extract_body_paragraphs(filepath):
         if style_name is None:
             word_style = (para.style.name or '').lower()
             if 'heading' in word_style:
+                style_name = 'Subhead'
+            elif _looks_like_subhead(text):
                 style_name = 'Subhead'
             else:
                 style_name = 'Body Text First' if not first_body_seen else 'Body Text'
