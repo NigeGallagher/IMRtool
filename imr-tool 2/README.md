@@ -56,7 +56,7 @@ python app.py
 
 Output follows the print layout of the actual journal: page 1 (title,
 byline, standfirst, a fixed blank gap reserved for a photo, and a lead
-chunk of running body text, roughly 350 words by default) is a single
+chunk of running body text, roughly 180 words by default) is a single
 column, fully justified, with a bit of space after each paragraph. From
 there, subheads, pull quotes, the rest of the body, captions, and
 endnotes all flow in two columns starting on page 2, also justified. A
@@ -104,6 +104,24 @@ of what the heuristic decides. The detection rules live in
 `_looks_like_subhead()` in `processor.py` if you want to tune the word
 limit (`MAX_SUBHEAD_WORDS`) or the list of lowercase-allowed connector
 words (`SUBHEAD_STOPWORDS`).
+
+## Endnote and footnote markers
+
+Where a contributor's manuscript uses Word's real References > Insert
+Endnote/Footnote feature, the reference number in the body text renders
+as a small, raised superscript number with no brackets - standard
+endnote style, e.g. "...grew rapidly.9" rather than "...grew
+rapidly.[9]". Multiple notes at the same spot show as comma-separated
+superscript ("9,10"). The actual note text is collected into an
+"Endnotes" section at the end, in normal-sized text - only the
+in-body reference number is shrunk and raised. The size ratio is set as
+`NOTE_MARKER_SCALE` near `_add_paragraph_with_notes` in `processor.py`
+(currently 70% of the surrounding body text size) if you want it bigger
+or smaller.
+
+The manual `[ENDNOTE]` tag convention is unaffected by this - text
+tagged that way is treated as a normal paragraph of endnote text, not a
+reference marker, so it doesn't get superscripted.
 
 ## Style markers
 
