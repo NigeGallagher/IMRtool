@@ -153,6 +153,35 @@ A few things worth knowing:
 - This is a bulk in-place overwrite, not reversible - if you want to
   compare before/after, download a copy first.
 
+## A couple of practical notes
+
+The author field strips a leading "By " if a contributor types it
+themselves (e.g. "By Jane Smith" becomes "Jane Smith" before the byline
+gets built), so the byline doesn't come out as "By By Jane Smith". This
+cleanup runs both at submission time and whenever "Reprocess all with
+current style" is used, so submissions saved before this fix existed
+get cleaned up too rather than staying stuck with whatever bad value
+was already in the log.
+
+The output document specifies Barlow Condensed and Source Serif 4 at the
+style level - if fonts look wrong when you open a generated file, check
+that the toolbar in Word actually shows "Barlow Condensed" and not just
+"Barlow"; they're separate font families, not weights of the same one,
+and having only the latter installed will silently substitute it for
+the former. Both are free Google Fonts. Substitution can also throw off
+line spacing since "exact" line height doesn't always match a
+substitute font's natural proportions.
+
+If a contributor's manuscript includes its own title/byline/standfirst
+at the top of the document (in addition to what they type into the web
+form fields), that duplicate content flows into the body as ordinary
+paragraphs - and since a short, punctuation-free line like a repeated
+byline often gets caught by the subhead auto-detection heuristic, it can
+end the single-column intro early, well under the word target. This
+isn't something reprocessing can fix, since the duplicate text is inside
+their uploaded file, not the styling logic - ask the contributor to
+remove the redundant front matter from their manuscript and resubmit.
+
 ## Style markers
 
 In the contributor's uploaded manuscript, any paragraph that starts with

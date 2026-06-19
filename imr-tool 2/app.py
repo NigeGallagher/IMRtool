@@ -33,6 +33,18 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def clean_author(author):
+    """Strip a leading 'By ' a contributor may have already typed
+    themselves, so the byline doesn't come out as 'By By Jane Smith'.
+    Used both at submission time and when reprocessing existing
+    submissions, so already-stored bad values get cleaned up too rather
+    than only protecting new ones."""
+    author = (author or '').strip()
+    if author.lower().startswith('by '):
+        author = author[3:].strip()
+    return author
+
+
 def load_submissions():
     if not os.path.exists(SUBMISSIONS_LOG):
         return []
@@ -76,7 +88,7 @@ def submit():
 
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
-        author = request.form.get('author', '').strip()
+        author = clean_author(request.form.get('author', ''))
         standfirst = request.form.get('standfirst', '').strip()
         article_type = request.form.get('article_type', 'article')
         email = request.form.get('email', '').strip()
@@ -200,7 +212,7 @@ def admin_reprocess_all():
             process_docx(
                 filepath=upload_path,
                 title=sub['title'],
-                author=sub['author'],
+                author=clean_author(sub['author']),
                 standfirst=sub['standfirst'],
                 article_type=sub.get('article_type', 'article'),
                 output_folder=app.config['OUTPUT_FOLDER'],
