@@ -164,19 +164,23 @@ def _add_fixed_gap(doc, points):
 NOTE_MARKER_SCALE = 0.7
 
 
-def _add_paragraph_with_notes(doc, text, style_name, note_numbers):
-    """Add a paragraph with its main text as one run, followed by any
-    note numbers as a separate small, raised (superscript) run with no
-    brackets - standard endnote-reference styling, e.g. "...grew.9"
-    rather than "...grew.[9]"."""
+def _add_paragraph_with_notes(doc, segments, style_name):
+    """Add a paragraph built from a list of ('text', string) and
+    ('note', [numbers]) segments, in order - so a footnote/endnote
+    reference renders as a small, raised, unbracketed run exactly where
+    it occurred in the original document, rather than every reference in
+    the paragraph getting bunched onto the end of it."""
     p = doc.add_paragraph(style=style_name)
-    p.add_run(text)
-    if note_numbers:
-        marker_run = p.add_run(','.join(str(n) for n in note_numbers))
-        marker_run.font.superscript = True
-        base_size = doc.styles[style_name].font.size
-        if base_size:
-            marker_run.font.size = Pt(round(base_size.pt * NOTE_MARKER_SCALE, 1))
+    base_size = doc.styles[style_name].font.size
+    for kind, value in segments:
+        if kind == 'text':
+            if value:
+                p.add_run(value)
+        else:
+            marker_run = p.add_run(','.join(str(n) for n in value))
+            marker_run.font.superscript = True
+            if base_size:
+                marker_run.font.size = Pt(round(base_size.pt * NOTE_MARKER_SCALE, 1))
     return p
 
 
@@ -187,6 +191,12 @@ def _get_or_add_style(doc, name):
         if s.name == name and s.type == WD_STYLE_TYPE.PARAGRAPH:
             return s
     return doc.styles.add_style(name, WD_STYLE_TYPE.PARAGRAPH)
+
+
+def _segment_word_count(segments):
+    """Word count across just the text portions of a segment list -
+    note markers shouldn't count toward the intro word budget."""
+    return sum(len(value.split()) for kind, value in segments if kind == 'text')
 
 
 def _build_styles(doc):
@@ -228,10 +238,60 @@ def _extract_note_texts(zf, part_name, tag):
     return notes
 
 
-def _paragraph_note_refs(para, tag):
-    """IDs of footnote/endnote references inside this paragraph, in order."""
-    return [ref.get(f'{{{W_NS}}}id')
-            for ref in para._p.findall(f'.//w:{tag}Reference', NSMAP)]
+def _paragraph_segments(para):
+    """Walk a paragraph's runs in document order, splitting it into
+    ('text', string) and ('note', (kind, id)) segments. Footnote/endnote
+    reference runs in Word don't carry visible text of their own - they
+    sit as a distinct run wherever the contributor inserted the
+    reference - so walking runs in order (rather than reading
+    para.text and a separate list of reference IDs) is what lets a note
+    end up attached to the right sentence instead of the end of the
+    whole paragraph."""
+    segments = []
+    buffer = []
+
+    def flush():
+        if buffer:
+            segments.append(('text', ''.join(buffer)))
+            buffer.clear()
+
+    for run in para._p.findall('w:r', NSMAP):
+        fn_ref = run.find('w:footnoteReference', NSMAP)
+        en_ref = run.find('w:endnoteReference', NSMAP)
+        if fn_ref is not None:
+            flush()
+            segments.append(('note', ('footnote', fn_ref.get(f'{{{W_NS}}}id'))))
+        elif en_ref is not None:
+            flush()
+            segments.append(('note', ('endnote', en_ref.get(f'{{{W_NS}}}id'))))
+        else:
+            for t in run.findall('w:t', NSMAP):
+                buffer.append(t.text or '')
+    flush()
+    return segments
+
+
+def _merge_note_segments(segments):
+    """Collapse consecutive ('note', ...) segments with nothing but
+    other notes between them into a single comma-joined marker, e.g. two
+    references back to back render as a single "9,10" superscript run
+    rather than two raised digits jammed together unreadably as "910"."""
+    merged = []
+    pending = []
+
+    def flush_pending():
+        if pending:
+            merged.append(('note', list(pending)))
+            pending.clear()
+
+    for kind, value in segments:
+        if kind == 'note':
+            pending.append(value)
+        else:
+            flush_pending()
+            merged.append((kind, value))
+    flush_pending()
+    return merged
 
 
 def _looks_like_subhead(text):
@@ -256,10 +316,11 @@ def extract_body_paragraphs(filepath):
     Also pulls real Word footnotes/endnotes out of the package directly,
     since python-docx's normal paragraph text silently drops them.
     Returns (paragraphs, notes) where paragraphs is
-    [(style_name, text, note_numbers), ...] and notes is
-    [(number, text), ...]. note_numbers are kept separate from text
-    rather than baked in as "[1]" so the caller can render them as
-    proper superscript instead of bracketed inline text."""
+    [(style_name, segments), ...] - segments is a list of
+    ('text', string) / ('note', [numbers]) tuples in document order, so a
+    reference renders attached to the exact sentence it belongs to
+    rather than bunched onto the end of the paragraph - and notes is
+    [(number, text), ...]."""
     src = Document(filepath)
     with zipfile.ZipFile(filepath) as zf:
         footnotes = _extract_note_texts(zf, 'word/footnotes.xml', 'footnote')
@@ -280,38 +341,46 @@ def extract_body_paragraphs(filepath):
 
     first_body_seen = False
     for para in src.paragraphs:
-        note_numbers = []
-        for fid in _paragraph_note_refs(para, 'footnote'):
-            n = register('footnote', fid, footnotes)
-            if n:
-                note_numbers.append(n)
-        for eid in _paragraph_note_refs(para, 'endnote'):
-            n = register('endnote', eid, endnotes)
-            if n:
-                note_numbers.append(n)
-
-        text = para.text.strip()
-        if not text:
+        full_text = para.text.strip()
+        if not full_text:
             continue
+
+        raw_segments = _paragraph_segments(para)
+        resolved = []
+        for kind, value in raw_segments:
+            if kind == 'text':
+                resolved.append(('text', value))
+            else:
+                note_kind, note_id = value
+                source = footnotes if note_kind == 'footnote' else endnotes
+                n = register(note_kind, note_id, source)
+                if n:
+                    resolved.append(('note', n))
 
         style_name = None
         for marker, mapped in MARKER_STYLE.items():
-            if text.upper().startswith(marker):
-                text = text[len(marker):].strip()
+            if full_text.upper().startswith(marker):
                 style_name = mapped
+                # Markers are plain text the contributor typed, so they
+                # land in the first text segment - strip just that
+                # prefix rather than touching anything else.
+                if resolved and resolved[0][0] == 'text':
+                    stripped = resolved[0][1].strip()
+                    if stripped.upper().startswith(marker):
+                        resolved[0] = ('text', stripped[len(marker):].strip())
                 break
 
         if style_name is None:
             word_style = (para.style.name or '').lower()
             if 'heading' in word_style:
                 style_name = 'Subhead'
-            elif _looks_like_subhead(text):
+            elif _looks_like_subhead(full_text):
                 style_name = 'Subhead'
             else:
                 style_name = 'Body Text First' if not first_body_seen else 'Body Text'
                 first_body_seen = True
 
-        result.append((style_name, text, note_numbers))
+        result.append((style_name, _merge_note_segments(resolved)))
 
     return result, notes
 
@@ -351,18 +420,18 @@ def process_docx(filepath, title, author, standfirst, article_type,
     remaining_paragraphs = []
     word_count = 0
     in_intro = True
-    for style_name, text, note_numbers in body_paragraphs:
+    for style_name, segments in body_paragraphs:
         if in_intro and style_name in INTRO_ELIGIBLE_STYLES:
-            intro_paragraphs.append((style_name, text, note_numbers))
-            word_count += len(text.split())
+            intro_paragraphs.append((style_name, segments))
+            word_count += _segment_word_count(segments)
             if word_count >= INTRO_WORD_TARGET:
                 in_intro = False
         else:
             in_intro = False
-            remaining_paragraphs.append((style_name, text, note_numbers))
+            remaining_paragraphs.append((style_name, segments))
 
-    for style_name, text, note_numbers in intro_paragraphs:
-        _add_paragraph_with_notes(out, text, style_name, note_numbers)
+    for style_name, segments in intro_paragraphs:
+        _add_paragraph_with_notes(out, segments, style_name)
 
     if remaining_paragraphs or notes:
         two_col_section = out.add_section(WD_SECTION.NEW_PAGE)
@@ -370,8 +439,8 @@ def process_docx(filepath, title, author, standfirst, article_type,
         _set_page_size(two_col_section)
         _set_margins(two_col_section)
 
-        for style_name, text, note_numbers in remaining_paragraphs:
-            _add_paragraph_with_notes(out, text, style_name, note_numbers)
+        for style_name, segments in remaining_paragraphs:
+            _add_paragraph_with_notes(out, segments, style_name)
 
         if notes:
             out.add_paragraph('Endnotes', style='Subhead')

@@ -120,13 +120,20 @@ Where a contributor's manuscript uses Word's real References > Insert
 Endnote/Footnote feature, the reference number in the body text renders
 as a small, raised superscript number with no brackets - standard
 endnote style, e.g. "...grew rapidly.9" rather than "...grew
-rapidly.[9]". Multiple notes at the same spot show as comma-separated
-superscript ("9,10"). The actual note text is collected into an
-"Endnotes" section at the end, in normal-sized text - only the
-in-body reference number is shrunk and raised. The size ratio is set as
-`NOTE_MARKER_SCALE` near `_add_paragraph_with_notes` in `processor.py`
-(currently 70% of the surrounding body text size) if you want it bigger
-or smaller.
+rapidly.[9]". Each reference renders exactly where it sat in the
+contributor's original document - attached to the sentence it actually
+belongs to - rather than every reference in a paragraph getting bunched
+onto the end of it (a paragraph with two sentences, each with their own
+note, e.g. "...autonomy.2 What he means...anticipation.3" renders with
+2 right after "autonomy." and 3 right after "anticipation.", not both
+stuck at the end). Multiple references sitting back to back with no
+text between them still show as a single comma-separated superscript
+("9,10") rather than two raised digits jammed together unreadably. The
+actual note text is collected into an "Endnotes" section at the end, in
+normal-sized text - only the in-body reference number is shrunk and
+raised. The size ratio is set as `NOTE_MARKER_SCALE` near
+`_add_paragraph_with_notes` in `processor.py` (currently 70% of the
+surrounding body text size) if you want it bigger or smaller.
 
 The manual `[ENDNOTE]` tag convention is unaffected by this - text
 tagged that way is treated as a normal paragraph of endnote text, not a
