@@ -19,7 +19,6 @@ InDesign.
 """
 
 import os
-import string
 import zipfile
 from lxml import etree
 from docx import Document
@@ -88,15 +87,16 @@ INTRO_WORD_TARGET = 70
 INTRO_ELIGIBLE_STYLES = {'Body Text First', 'Body Text'}
 
 # Heuristic for catching section headings that the contributor didn't
-# explicitly tag with [SUBHEAD] or a Word Heading style - short,
-# punctuation-free, title-case lines like 'Artificial Valuations' or
-# 'The MAGA Turn'. Small connector words (the, of, in, ...) are allowed
-# to stay lowercase, matching normal title-case convention.
+# explicitly tag with [SUBHEAD] or a Word Heading style. In practice,
+# real flowing prose from a Word document almost always ends in actual
+# punctuation - contributors write complete sentences - so "short, with
+# no terminal punctuation" is already doing most of the real work of
+# telling a heading apart from a sentence. Earlier versions of this also
+# required every word to be capitalised (Title Case, e.g. "Silicon
+# Economy"), which missed plenty of real headings that use sentence case
+# instead (e.g. "Critique of the family") - so capitalisation here is
+# just a basic sanity check, not the main signal.
 MAX_SUBHEAD_WORDS = 8
-SUBHEAD_STOPWORDS = {
-    'a', 'an', 'the', 'and', 'or', 'but', 'of', 'in', 'on', 'to', 'for',
-    'with', 'is', 'are', 'as', 'at', 'by', 'vs', 'versus', 'from', '&',
-}
 
 # Fixed blank space left on page 1, between the standfirst and the start
 # of the body text - reserved for a photo or illustration to be dropped
@@ -236,21 +236,18 @@ def _paragraph_note_refs(para, tag):
 
 def _looks_like_subhead(text):
     """True if a plain, untagged paragraph looks like a section heading
-    rather than a sentence of running prose: short, no terminal
-    punctuation, and every meaningful word capitalised."""
+    rather than a sentence of running prose: short, with no terminal
+    punctuation, and starting with a capital letter. Deliberately loose
+    on capitalisation pattern beyond that - it covers both Title Case
+    ("Silicon Economy") and sentence case ("Critique of the family"),
+    since real headings show up in both conventions and the punctuation
+    + length check is already doing the heavy lifting."""
     words = text.split()
     if not words or len(words) > MAX_SUBHEAD_WORDS:
         return False
     if text[-1] in '.,;:!?':
         return False
-    content_words = [
-        w for w in words
-        if w.strip(string.punctuation).lower() not in SUBHEAD_STOPWORDS
-    ]
-    alpha_words = [w for w in content_words if w[0].isalpha()]
-    if not alpha_words:
-        return False
-    return all(w[0].isupper() for w in alpha_words)
+    return text[0].isalpha() and text[0].isupper()
 
 
 def extract_body_paragraphs(filepath):

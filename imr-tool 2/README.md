@@ -96,21 +96,23 @@ are near the top of `processor.py`, alongside the margin values
 
 If a contributor doesn't tag a section heading with `[SUBHEAD]`, the tool
 tries to catch it anyway. Any plain paragraph that's short (8 words or
-fewer), has no terminal punctuation, and has every meaningful word
-capitalised (small connector words like "the", "of", "in" are allowed to
-stay lowercase) gets treated as a subhead automatically - bolded and
-styled the same as an explicitly tagged one. This catches things like
-"Silicon Economy" or "The MAGA Turn" sitting on their own line without
-needing the contributor to remember the marker syntax.
+fewer), has no terminal punctuation, and starts with a capital letter
+gets treated as a subhead automatically - bolded and styled the same as
+an explicitly tagged one. This deliberately covers both Title Case
+headings ("Silicon Economy", "The MAGA Turn") and sentence-case headings
+("Critique of the family") without needing every word capitalised,
+since real headings show up in both conventions and the punctuation +
+length check is doing most of the real discriminating (genuine flowing
+prose from a Word document almost always ends in an actual full stop).
 
 It's a heuristic, so it can occasionally misfire both ways: a genuine
 short declarative sentence without a full stop could get mistaken for a
 heading, or an unusual heading style might slip through as plain body
 text. The `[SUBHEAD]` tag always works as an explicit override regardless
-of what the heuristic decides. The detection rules live in
+of what the heuristic decides. The detection rule lives in
 `_looks_like_subhead()` in `processor.py` if you want to tune the word
-limit (`MAX_SUBHEAD_WORDS`) or the list of lowercase-allowed connector
-words (`SUBHEAD_STOPWORDS`).
+limit (`MAX_SUBHEAD_WORDS`) or the punctuation/capitalisation check
+itself.
 
 ## Endnote and footnote markers
 
