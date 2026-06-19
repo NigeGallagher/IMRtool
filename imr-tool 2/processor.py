@@ -23,7 +23,7 @@ import string
 import zipfile
 from lxml import etree
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Pt, Inches, Mm
 from docx.enum.text import WD_LINE_SPACING, WD_ALIGN_PARAGRAPH
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.section import WD_SECTION
@@ -54,6 +54,12 @@ MARKER_STYLE = {
     '[ENDNOTE]':   'Endnote Text',
 }
 
+# Page size - the journal's actual trim size, not a standard Word
+# default. Applied to both the single-column intro section and the
+# two-column body section.
+PAGE_WIDTH_MM = 200
+PAGE_HEIGHT_MM = 250
+
 # Page margins, applied to both the single-column intro section and the
 # two-column body section. Eased back partway from a first pass that ran
 # too tight - still noticeably slimmer than Word's US default (1"/1.25")
@@ -72,7 +78,7 @@ MARGIN_RIGHT_IN = 0.85
 # fonts, and on how long the title and standfirst happen to be. Tune this
 # number (and IMAGE_GAP_PT below) together if the intro page is running
 # short or long in practice.
-INTRO_WORD_TARGET = 180
+INTRO_WORD_TARGET = 70
 
 # Styles that flow as ordinary running body copy and should stop the
 # single-column intro section once the word target is hit. Subheads,
@@ -124,6 +130,11 @@ def _set_columns(section, num, space_twips=360):
     cols = sectPr.find(qn('w:cols'))
     cols.set(qn('w:num'), str(num))
     cols.set(qn('w:space'), str(space_twips))
+
+
+def _set_page_size(section):
+    section.page_width = Mm(PAGE_WIDTH_MM)
+    section.page_height = Mm(PAGE_HEIGHT_MM)
 
 
 def _set_margins(section):
@@ -323,6 +334,7 @@ def process_docx(filepath, title, author, standfirst, article_type,
 
     # Strip the default boilerplate styles isn't necessary - we just add ours
     _build_styles(out)
+    _set_page_size(out.sections[0])
     _set_margins(out.sections[0])
 
     out.add_paragraph(title, style='Article Title')
@@ -358,6 +370,7 @@ def process_docx(filepath, title, author, standfirst, article_type,
     if remaining_paragraphs or notes:
         two_col_section = out.add_section(WD_SECTION.NEW_PAGE)
         _set_columns(two_col_section, 2)
+        _set_page_size(two_col_section)
         _set_margins(two_col_section)
 
         for style_name, text, note_numbers in remaining_paragraphs:

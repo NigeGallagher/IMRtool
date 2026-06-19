@@ -54,9 +54,14 @@ python app.py
 
 ## Layout
 
+Page size is 200mm x 250mm - the journal's actual trim size, not a
+standard Word default - applied to both the single-column intro section
+and the two-column body section. Set as `PAGE_WIDTH_MM` /
+`PAGE_HEIGHT_MM` near the top of `processor.py`.
+
 Output follows the print layout of the actual journal: page 1 (title,
 byline, standfirst, a fixed blank gap reserved for a photo, and a lead
-chunk of running body text, roughly 180 words by default) is a single
+chunk of running body text, roughly 70 words by default) is a single
 column, fully justified, with a bit of space after each paragraph. From
 there, subheads, pull quotes, the rest of the body, captions, and
 endnotes all flow in two columns starting on page 2, also justified. A
@@ -71,17 +76,19 @@ consistent space for artwork to be dropped in later, not to scale with
 content. It's set as `IMAGE_GAP_PT` near the top of `processor.py`.
 
 Margins sit at 0.7" top/bottom and 0.85" left/right - slimmer than
-Word's US default (1"/1.25") so more text fits across the page, but not
-razor-thin.
+Word's US default, so more text fits across the page on this page size,
+but not razor-thin.
 
-The intro word target (180 words by default) is a heuristic, not a
+The intro word target (70 words by default) is a heuristic, not a
 guarantee of exactly filling page 1 - actual fit depends on how
 Word/InDesign renders the fonts, and on how long the title and
 standfirst happen to be. It's deliberately set low to leave room for
-the 180pt image gap above it; if you change `IMAGE_GAP_PT`, adjust
-`INTRO_WORD_TARGET` to match, or the two-column section will get pushed
-to page 3 instead of page 2. Both constants are near the top of
-`processor.py`, alongside the margin values
+both the 180pt image gap above it and the smaller 200x250mm page; if you
+change `IMAGE_GAP_PT` or `PAGE_WIDTH_MM`/`PAGE_HEIGHT_MM`, re-check
+`INTRO_WORD_TARGET` against a real submission, or the two-column section
+can get pushed to page 3 instead of page 2 (it's happened twice already
+when only one side of that balance got updated). All of these constants
+are near the top of `processor.py`, alongside the margin values
 (`MARGIN_TOP_IN` / `MARGIN_BOTTOM_IN` / `MARGIN_LEFT_IN` /
 `MARGIN_RIGHT_IN`).
 
@@ -122,6 +129,29 @@ or smaller.
 The manual `[ENDNOTE]` tag convention is unaffected by this - text
 tagged that way is treated as a normal paragraph of endnote text, not a
 reference marker, so it doesn't get superscripted.
+
+## Reprocessing existing submissions after a style change
+
+The admin dashboard has a "Reprocess all with current style" button.
+It re-runs every submission's original upload back through whatever
+`processor.py` currently looks like, overwriting each submission's
+output file in place (same filename, since it reuses the original
+timestamp) - so after you change a style or layout setting, you don't
+have to ask every contributor to resubmit just to get the new look.
+
+A few things worth knowing:
+
+- It only works for submissions made after this feature was added,
+  since it needs each submission's standfirst text and original upload
+  file still sitting on disk. Submissions made before this feature
+  (or before the Volume was set up, if uploads got wiped on a redeploy)
+  get skipped with a clear note rather than silently breaking.
+- After it runs, you'll get a one-line summary: how many reprocessed
+  cleanly, which (if any) failed because the original upload is missing,
+  and which (if any) got skipped because they predate standfirst
+  tracking.
+- This is a bulk in-place overwrite, not reversible - if you want to
+  compare before/after, download a copy first.
 
 ## Style markers
 

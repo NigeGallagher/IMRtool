@@ -118,6 +118,7 @@ def submit():
             'title': title,
             'author': author,
             'email': email,
+            'standfirst': standfirst,
             'article_type': article_type,
             'original_filename': file.filename,
             'output_file': os.path.basename(output_path),
@@ -161,6 +162,61 @@ def admin_download(filename):
         flash('File not found.')
         return redirect(url_for('admin_dashboard'))
     return send_file(path, as_attachment=True)
+
+
+@app.route('/admin/reprocess_all', methods=['POST'])
+def admin_reprocess_all():
+    """Re-run every existing submission's original upload through the
+    current processor.py - useful after a style/layout change, so
+    already-submitted articles pick up the new look without contributors
+    having to resubmit. Reuses each submission's original timestamp, so
+    the regenerated file overwrites the old output in place rather than
+    creating a duplicate entry."""
+    if not session.get('is_admin'):
+        return redirect(url_for('admin_login'))
+
+    submissions = load_submissions()
+    success_count = 0
+    failed = []
+    skipped_old = []
+
+    for sub in submissions:
+        title = sub.get('title', 'Untitled')
+
+        # Submissions made before standfirst tracking was added to the
+        # log can't be safely reprocessed - reprocessing would silently
+        # drop the standfirst rather than reproduce it.
+        if 'standfirst' not in sub:
+            skipped_old.append(title)
+            continue
+
+        safe_name = secure_filename(sub.get('original_filename', ''))
+        upload_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{sub['timestamp']}_{safe_name}")
+        if not os.path.exists(upload_path):
+            failed.append(title)
+            continue
+
+        try:
+            process_docx(
+                filepath=upload_path,
+                title=sub['title'],
+                author=sub['author'],
+                standfirst=sub['standfirst'],
+                article_type=sub.get('article_type', 'article'),
+                output_folder=app.config['OUTPUT_FOLDER'],
+                timestamp=sub['timestamp'],
+            )
+            success_count += 1
+        except Exception:
+            failed.append(title)
+
+    message = f'Reprocessed {success_count} submission(s) with the current style.'
+    if failed:
+        message += f' Could not reprocess (missing original upload or error): {", ".join(failed)}.'
+    if skipped_old:
+        message += f' Skipped (submitted before reprocessing support was added - ask them to resubmit): {", ".join(skipped_old)}.'
+    flash(message)
+    return redirect(url_for('admin_dashboard'))
 
 
 @app.route('/admin/logout')
