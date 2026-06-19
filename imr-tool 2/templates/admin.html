@@ -8,6 +8,16 @@
 </div>
 
 {% if submissions %}
+<form method="post" action="{{ url_for('admin_reprocess_all') }}"
+      onsubmit="return confirm('Reprocess all {{ submissions|length }} submission(s) with the current style? This overwrites the existing output files in place.');">
+  <button type="submit">Reprocess all with current style</button>
+</form>
+<p class="meta" style="margin-top:8px;">
+  Re-runs every submission's original upload through whatever
+  processor.py looks like right now - use this after changing the style
+  or layout so existing submissions don't have to be resubmitted.
+</p>
+
 <table>
   <tr>
     <th>Received</th>
