@@ -34,7 +34,7 @@
     <td>{{ s.author }}{% if s.email %}<br><span class="meta">{{ s.email }}</span>{% endif %}</td>
     <td>{{ s.article_type }}</td>
     <td><a class="dl" href="{{ url_for('admin_download', filename=s.output_file) }}">.docx</a></td>
-    <td><a class="dl" href="{{ url_for('admin_download_original', timestamp=s.timestamp) }}">original</a></td>
+    <td>{% if s.timestamp %}<a class="dl" href="{{ url_for('admin_download_original', timestamp=s.timestamp) }}">original</a>{% else %}<span class="meta">n/a</span>{% endif %}</td>
   </tr>
   {% endfor %}
 </table>
