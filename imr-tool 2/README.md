@@ -139,6 +139,17 @@ The manual `[ENDNOTE]` tag convention is unaffected by this - text
 tagged that way is treated as a normal paragraph of endnote text, not a
 reference marker, so it doesn't get superscripted.
 
+## Original upload as a reference
+
+Each row on the admin dashboard has two download links: "Styled" for the
+IMR-formatted output, and "Original" for exactly what the contributor
+uploaded, unstyled, untouched. Useful for checking exact wording,
+[MARKER] tags they used, or footnotes/endnotes in the source when
+something in the styled version looks off. It serves the file under the
+contributor's original filename rather than the internal timestamped
+one, and if the original upload is missing (e.g. lost in a redeploy
+without a persistent Volume), it says so clearly rather than erroring.
+
 ## Reprocessing existing submissions after a style change
 
 The admin dashboard has a "Reprocess all with current style" button.

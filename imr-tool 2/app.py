@@ -176,6 +176,28 @@ def admin_download(filename):
     return send_file(path, as_attachment=True)
 
 
+@app.route('/admin/download_original/<timestamp>')
+def admin_download_original(timestamp):
+    """Serve the contributor's original, unstyled upload for a given
+    submission - useful as a reference alongside the styled output,
+    e.g. to check exact wording, formatting markers, or footnotes the
+    contributor used. Keyed by submission timestamp (looked up in
+    submissions.json) rather than taking a raw filename directly, so it
+    can only ever serve a file that's actually logged as a submission."""
+    if not session.get('is_admin'):
+        return redirect(url_for('admin_login'))
+    sub = next((s for s in load_submissions() if s.get('timestamp') == timestamp), None)
+    if not sub:
+        flash('Submission not found.')
+        return redirect(url_for('admin_dashboard'))
+    safe_name = secure_filename(sub.get('original_filename', ''))
+    path = os.path.join(app.config['UPLOAD_FOLDER'], f"{sub['timestamp']}_{safe_name}")
+    if not os.path.exists(path):
+        flash('Original upload not found - it may have been lost in a redeploy without a persistent Volume.')
+        return redirect(url_for('admin_dashboard'))
+    return send_file(path, as_attachment=True, download_name=sub.get('original_filename') or safe_name)
+
+
 @app.route('/admin/reprocess_all', methods=['POST'])
 def admin_reprocess_all():
     """Re-run every existing submission's original upload through the
