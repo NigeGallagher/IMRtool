@@ -49,7 +49,21 @@ def load_submissions():
     if not os.path.exists(SUBMISSIONS_LOG):
         return []
     with open(SUBMISSIONS_LOG, 'r') as f:
-        return json.load(f)
+        raw = json.load(f)
+    # Backfill safe defaults for any keys added after a submission was
+    # first saved, so the dashboard never crashes on an older entry.
+    defaults = {
+        'timestamp': '',
+        'title': '(untitled)',
+        'author': '',
+        'email': '',
+        'standfirst': '',
+        'article_type': 'article',
+        'original_filename': '',
+        'output_file': '',
+        'received_at': '',
+    }
+    return [{**defaults, **sub} for sub in raw]
 
 
 def save_submission(entry):
